@@ -642,6 +642,34 @@ def reset_user_password(user_id):
     flash("Password reset successfully.", "success")
     return redirect(url_for("admin_users"))
 
+
+@app.route("/change-password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    user = current_user()
+    if request.method == "POST":
+        old_password = request.form.get("old_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        if not user.check_password(old_password):
+            flash("Old password is incorrect.", "danger")
+            return redirect(url_for("change_password"))
+        if not new_password or len(new_password) < 8:
+            flash("New password must be at least 8 characters.", "danger")
+            return redirect(url_for("change_password"))
+        if new_password != confirm_password:
+            flash("New password confirmation does not match.", "danger")
+            return redirect(url_for("change_password"))
+        if old_password == new_password:
+            flash("New password must be different from old password.", "danger")
+            return redirect(url_for("change_password"))
+        user.set_password(new_password)
+        audit("change_own_password", "user", user.id, f"Own password changed for username={user.username}")
+        db.session.commit()
+        flash("Password changed successfully. Please use your new password next time.", "success")
+        return redirect(url_for("admin_dashboard" if user.role in ["admin", "owner"] else "attendance"))
+    return render_template("change_password.html")
+
 @app.route("/admin/settings", methods=["GET", "POST"])
 @owner_required
 def admin_settings():
