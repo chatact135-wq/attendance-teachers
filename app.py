@@ -451,16 +451,28 @@ def submit_attendance():
 def admin_dashboard():
     q_date = request.args.get("date", "")
     search = request.args.get("search", "").strip()
+    action_filter = request.args.get("action", "all")
+
     query = Attendance.query.join(User, Attendance.user_id == User.id)
+
     if q_date:
         start = datetime.strptime(q_date, "%Y-%m-%d")
         end = datetime.combine(start.date(), datetime.max.time())
         query = query.filter(Attendance.timestamp_utc >= start, Attendance.timestamp_utc <= end)
+
     if search:
         like = f"%{search.lower()}%"
         query = query.filter((func.lower(User.username).like(like)) | (func.lower(User.full_name).like(like)))
+
+    # Dashboard quick filter: Sign In / Sign Out.
+    # The action/type column remains hidden in the table, but admins can filter by it.
+    if action_filter == "sign_in":
+        query = query.filter(Attendance.action == "IN")
+    elif action_filter == "sign_out":
+        query = query.filter(Attendance.action == "OUT")
+
     records = query.order_by(Attendance.timestamp_utc.desc()).limit(500).all()
-    return render_template("admin.html", records=records, q_date=q_date, search=search)
+    return render_template("admin.html", records=records, q_date=q_date, search=search, action_filter=action_filter)
 
 @app.route("/owner/manual", methods=["GET", "POST"])
 @owner_required
