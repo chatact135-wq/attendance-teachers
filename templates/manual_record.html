@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+  <h1>System Owner Manual Attendance Entry</h1>
+  <p class="muted">Use this for legitimate corrections or backfilled records. Every action is recorded in the audit log.</p>
+  <form method="post" enctype="multipart/form-data">
+    <label>User</label>
+    <select name="user_id" required>{% for u in users %}<option value="{{ u.id }}">{{ u.full_name }} ({{ u.username }})</option>{% endfor %}</select>
+    <label>Action</label><select name="action"><option value="IN">Sign In</option><option value="OUT">Sign Out</option></select>
+    <label>System UAE Time</label><input name="timestamp" type="datetime-local" value="{{ now_value }}" required>
+    <label>Latitude</label><input name="latitude" value="{{ default_lat }}" required>
+    <label>Longitude</label><input name="longitude" value="{{ default_lng }}" required>
+    <label>GPS Accuracy meters</label><input name="accuracy" value="0" required>
+    <label>Required Photo</label><input name="photo" type="file" accept="image/*" required>
+    <label>Note / reason</label><textarea name="note" rows="3" placeholder="Reason for manual entry or correction"></textarea>
+    <button class="primary" type="submit">Add Manual Record</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+  <h1>Edit Attendance Record</h1>
+  <p class="muted">System Owner only. Changes are saved in Audit Log.</p>
+  <form method="post" enctype="multipart/form-data">
+    <label>User</label>
+    <select name="user_id" required>{% for u in users %}<option value="{{ u.id }}" {% if u.id == rec.user_id %}selected{% endif %}>{{ u.full_name }} ({{ u.username }})</option>{% endfor %}</select>
+    <label>Action</label><select name="action"><option value="IN" {% if rec.action == 'IN' %}selected{% endif %}>Sign In</option><option value="OUT" {% if rec.action == 'OUT' %}selected{% endif %}>Sign Out</option></select>
+    <label>System UAE Time</label><input name="timestamp" type="datetime-local" value="{{ rec.timestamp_utc.strftime('%Y-%m-%dT%H:%M') }}" required>
+    <label>Latitude</label><input name="latitude" value="{{ rec.latitude }}" required>
+    <label>Longitude</label><input name="longitude" value="{{ rec.longitude }}" required>
+    <label>GPS Accuracy meters</label><input name="accuracy" value="{{ rec.accuracy or 0 }}" required>
+    <label>Replace Photo (optional)</label><input name="photo" type="file" accept="image/*">
+    <p>Current Photo: <a href="{{ url_for('static', filename=rec.photo_path) }}" target="_blank">View</a></p>
+    <label>Note / reason</label><textarea name="note" rows="3">{{ rec.note or '' }}</textarea>
+    <button class="primary" type="submit">Save Changes</button>
+  </form>
+</div>
+{% endblock %}
