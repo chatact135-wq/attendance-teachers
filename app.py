@@ -746,7 +746,7 @@ def export_excel():
 @app.route("/init-db")
 def init_db_route():
     init_db()
-    return "Database initialized. Default admin: admin / configured secure admin password. System Owner: Ahmad / configured owner password."
+    return "Database initialized. Default admin: admin / configured secure admin password. System Owner: owner / configured owner password."
 
 def ensure_schema_upgrades():
     """Lightweight startup migration for existing Railway/PostgreSQL or SQLite databases."""
@@ -814,11 +814,20 @@ def init_db():
         admin_user.set_password(DEFAULT_ADMIN_PASSWORD)
         set_setting("secure_admin_password_applied", "1")
         db.session.commit()
-    if not User.query.filter(func.lower(User.username) == "ahmad").first():
-        owner = User(username="Ahmad", full_name="Ahmad - System Owner", role="owner")
-        owner.set_password(DEFAULT_OWNER_PASSWORD)
+    # Always ensure the System Owner account exists and has the correct role.
+    # This fixes deployments where an older database already had Ahmad/Ahmed/owner as a normal user/admin.
+    owner = User.query.filter(func.lower(User.username).in_(["owner", "ahmad", "ahmed"])).first()
+    if not owner:
+        owner = User(username="owner", full_name="System Owner", role="owner")
         db.session.add(owner)
-        db.session.commit()
+    owner.username = "owner"
+    owner.full_name = "System Owner"
+    owner.role = "owner"
+    owner.is_active = True
+    # Reset owner password on startup from OWNER_PASSWORD env var, or the default below.
+    # Change OWNER_PASSWORD in Railway Variables if you want a different owner password.
+    owner.set_password(DEFAULT_OWNER_PASSWORD)
+    db.session.commit()
 
 with app.app_context():
     init_db()
