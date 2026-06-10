@@ -16,10 +16,10 @@ let cameraReady = false;
 let photoReady = false;
 let locationReady = false;
 function updateButton(){
-  deviceTime.value = new Date().toLocaleString();
+  deviceTime.value = "SERVER_UAE_TIME_ONLY";
   submitBtn.disabled = !(photoReady && locationReady);
 }
-setInterval(()=>{ deviceTime.value = new Date().toLocaleString(); },1000);
+// Device/browser time is not used. The server stores official UAE time only.
 startCamera.addEventListener('click', async ()=>{
   try{
     const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:false});

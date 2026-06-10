@@ -40,12 +40,12 @@
   <section class="card">
     <h2>Today Records</h2>
     <table>
-      <thead><tr><th>Action</th><th>Device Time</th><th>Photo</th></tr></thead>
+      <thead><tr><th>Action</th><th>System UAE Time</th><th>Photo</th></tr></thead>
       <tbody>
       {% for r in records %}
         <tr>
           <td>{{ 'In' if r.action == 'IN' else 'Out' }}</td>
-          <td>{{ r.device_time }}</td>
+          <td>{{ r.timestamp_utc.strftime('%Y-%m-%d %H:%M:%S') }}</td>
           <td><a href="{{ url_for('static', filename=r.photo_path) }}" target="_blank">View</a></td>
         </tr>
       {% else %}

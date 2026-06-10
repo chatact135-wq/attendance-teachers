@@ -71,3 +71,6 @@ Update in this version:
 - Allowed radius remains 250 meters.
 - GPS accuracy limit default changed from 100 meters to 250 meters.
 - Admin can dynamically edit both radius and GPS accuracy from Admin > Location Settings.
+
+## Time handling
+This version does not trust the user's device time. Sign-in and sign-out timestamps are generated on the server using UAE time zone only (`Asia/Dubai`, UTC+4). Admin pages and Excel export display System UAE Time.

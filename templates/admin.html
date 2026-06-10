@@ -13,14 +13,14 @@
     <a class="button" href="{{ url_for('export_excel') }}">Export Excel</a>
   </form>
   <table>
-    <thead><tr><th>Name</th><th>Action</th><th>Device Time</th><th>Server UTC</th><th>Location</th><th>GPS Accuracy</th><th>Distance</th><th>Photo</th></tr></thead>
+    <thead><tr><th>Name</th><th>Action</th><th>System UAE Time</th><th>Time Source</th><th>Location</th><th>GPS Accuracy</th><th>Distance</th><th>Photo</th></tr></thead>
     <tbody>
       {% for r in records %}
       <tr>
         <td>{{ r.user.full_name }}</td>
         <td>{{ 'Sign In' if r.action == 'IN' else 'Sign Out' }}</td>
-        <td>{{ r.device_time }}</td>
         <td>{{ r.timestamp_utc.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>Server UAE</td>
         <td>{{ '%.6f'|format(r.latitude) }}, {{ '%.6f'|format(r.longitude) }}<br><a href="https://www.google.com/maps?q={{ r.latitude }},{{ r.longitude }}" target="_blank">Map</a></td>
         <td>{{ '%.0f'|format(r.accuracy or 0) }} m</td>
         <td>{{ '%.1f'|format(r.distance_m or 0) }} m</td>

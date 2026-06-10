@@ -2,6 +2,7 @@ import os
 import base64
 import uuid
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from functools import wraps
 from math import radians, sin, cos, sqrt, atan2
 
@@ -22,6 +23,12 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
+UAE_TZ = ZoneInfo("Asia/Dubai")
+
+def uae_now():
+    """Server-side UAE time. Do not trust device/browser time for attendance."""
+    return datetime.now(UAE_TZ).replace(tzinfo=None)
+
 # Default geofence: change these from Admin > Location Settings after first login.
 DEFAULT_CENTER_LAT = float(os.environ.get("ALLOWED_CENTER_LAT", "24.2651997"))
 DEFAULT_CENTER_LNG = float(os.environ.get("ALLOWED_CENTER_LNG", "55.7314160"))
@@ -35,7 +42,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="user")
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=uae_now)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -47,8 +54,8 @@ class Attendance(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     action = db.Column(db.String(20), nullable=False)  # IN or OUT
-    timestamp_utc = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    device_time = db.Column(db.String(80), nullable=False)
+    timestamp_utc = db.Column(db.DateTime, default=uae_now, nullable=False)
+    device_time = db.Column(db.String(80), nullable=False)  # Stored as server UAE time, not user device time
     latitude = db.Column(db.Float, nullable=False)
     longitude = db.Column(db.Float, nullable=False)
     accuracy = db.Column(db.Float)
@@ -174,7 +181,7 @@ def logout():
 @login_required
 def attendance():
     user = current_user()
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_start = datetime.combine(uae_now().date(), datetime.min.time())
     records = Attendance.query.filter(Attendance.user_id == user.id, Attendance.timestamp_utc >= today_start).order_by(Attendance.timestamp_utc.desc()).all()
     last_record = Attendance.query.filter_by(user_id=user.id).order_by(Attendance.timestamp_utc.desc()).first()
     next_action = "OUT" if last_record and last_record.action == "IN" else "IN"
@@ -190,7 +197,9 @@ def attendance():
 def submit_attendance():
     user = current_user()
     action = request.form.get("action")
-    device_time = request.form.get("device_time", "")
+    # Never trust browser/device time. Attendance time is generated on the server in UAE time only.
+    system_uae_time = uae_now()
+    device_time = system_uae_time.strftime("%Y-%m-%d %H:%M:%S")
     lat = request.form.get("latitude")
     lng = request.form.get("longitude")
     accuracy = request.form.get("accuracy") or None
@@ -234,7 +243,7 @@ def submit_attendance():
 
     header, encoded = photo_data.split(",", 1)
     image_bytes = base64.b64decode(encoded)
-    filename = secure_filename(f"{user.username}_{action}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.jpg")
+    filename = secure_filename(f"{user.username}_{action}_{system_uae_time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.jpg")
     file_path = os.path.join(CAPTURE_DIR, filename)
     with open(file_path, "wb") as f:
         f.write(image_bytes)
@@ -248,11 +257,12 @@ def submit_attendance():
         accuracy=accuracy_f,
         distance_m=dist,
         photo_path=f"captures/{filename}",
-        user_agent=request.headers.get("User-Agent", "")
+        user_agent=request.headers.get("User-Agent", ""),
+        timestamp_utc=system_uae_time
     )
     db.session.add(rec)
     db.session.commit()
-    flash(f"Signed {'in' if action == 'IN' else 'out'} successfully with location and camera photo.", "success")
+    flash(f"Signed {'in' if action == 'IN' else 'out'} successfully using server UAE time, location and camera photo.", "success")
     return redirect(url_for("attendance"))
 
 @app.route("/admin")
@@ -320,8 +330,8 @@ def export_excel():
             "Name": r.user.full_name,
             "Username": r.user.username,
             "Action": "Sign In" if r.action == "IN" else "Sign Out",
-            "Server UTC Time": r.timestamp_utc.strftime("%Y-%m-%d %H:%M:%S"),
-            "Device Local Time": r.device_time,
+            "System UAE Time": r.timestamp_utc.strftime("%Y-%m-%d %H:%M:%S"),
+            "Stored Time Source": "Server UAE time",
             "Latitude": r.latitude,
             "Longitude": r.longitude,
             "Accuracy meters": r.accuracy,
