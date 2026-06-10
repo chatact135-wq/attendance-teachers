@@ -354,6 +354,18 @@ def security_status():
         "is_hosting": risk["is_hosting"],
     }
 
+
+@app.route("/location-config")
+@login_required
+def location_config():
+    return {
+        "center_lat": float(get_setting("center_lat", DEFAULT_CENTER_LAT)),
+        "center_lng": float(get_setting("center_lng", DEFAULT_CENTER_LNG)),
+        "radius_m": float(get_setting("radius_m", DEFAULT_RADIUS_M)),
+        "max_gps_accuracy_m": float(get_setting("max_gps_accuracy_m", DEFAULT_MAX_GPS_ACCURACY_M)),
+        "mode": get_setting("geofence_mode", "circle"),
+    }
+
 @app.route("/submit-attendance", methods=["POST"])
 @login_required
 def submit_attendance():
@@ -803,6 +815,16 @@ def init_db():
         set_setting("block_hosting_provider", "1")
         set_setting("block_non_uae_ip", "0")
         db.session.commit()
+
+    # Always keep the official allowed attendance center fixed to the approved UAE location.
+    # This prevents any old deployed database/settings row from accidentally using the user's
+    # current GPS position as the comparison center.
+    set_setting("center_lat", DEFAULT_CENTER_LAT)
+    set_setting("center_lng", DEFAULT_CENTER_LNG)
+    set_setting("radius_m", DEFAULT_RADIUS_M)
+    set_setting("max_gps_accuracy_m", DEFAULT_MAX_GPS_ACCURACY_M)
+    db.session.commit()
+
     admin_user = User.query.filter(func.lower(User.username) == "admin").first()
     if not admin_user:
         admin_user = User(username="admin", full_name="System Admin", role="admin")

@@ -20,7 +20,33 @@ let securityBlocked = false;
 let cameraReady = false;
 let photoReady = false;
 let locationReady = false;
+let geofenceBlocked = true;
 let selectedAction = '';
+let locationConfig = null;
+
+function metersBetween(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (v) => v * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function loadLocationConfig() {
+  try {
+    const res = await fetch('/location-config', {cache:'no-store'});
+    locationConfig = await res.json();
+  } catch(e) {
+    locationConfig = {
+      center_lat: 24.2651997,
+      center_lng: 55.7314160,
+      radius_m: 250,
+      max_gps_accuracy_m: 250,
+      mode: 'circle'
+    };
+  }
+}
 
 function setAction(action) {
   selectedAction = action;
@@ -29,7 +55,7 @@ function setAction(action) {
 
 function updateButtons(){
   deviceTime.value = 'SERVER_UAE_TIME_ONLY';
-  const ready = photoReady && locationReady && !securityBlocked;
+  const ready = photoReady && locationReady && !securityBlocked && !geofenceBlocked;
   if (signInBtn) signInBtn.disabled = !(ready && window.CAN_SIGN_IN);
   if (signOutBtn) signOutBtn.disabled = !(ready && window.CAN_SIGN_OUT);
 }
@@ -82,18 +108,46 @@ capturePhoto.addEventListener('click', ()=>{
   updateButtons();
 });
 
-getLocation.addEventListener('click', ()=>{
+getLocation.addEventListener('click', async ()=>{
   if(!navigator.geolocation){
     locationStatus.textContent = 'Location is not supported on this device.';
     return;
   }
-  locationStatus.textContent = 'Location: checking...';
+  await loadLocationConfig();
+  locationStatus.textContent = 'Location: checking against saved allowed center...';
   navigator.geolocation.getCurrentPosition((pos)=>{
-    latInput.value = pos.coords.latitude;
-    lngInput.value = pos.coords.longitude;
-    accInput.value = pos.coords.accuracy;
+    const userLat = pos.coords.latitude;
+    const userLng = pos.coords.longitude;
+    const accuracy = pos.coords.accuracy;
+    const centerLat = Number(locationConfig.center_lat);
+    const centerLng = Number(locationConfig.center_lng);
+    const radius = Number(locationConfig.radius_m);
+    const maxAccuracy = Number(locationConfig.max_gps_accuracy_m);
+    const distance = metersBetween(centerLat, centerLng, userLat, userLng);
+
+    latInput.value = userLat;
+    lngInput.value = userLng;
+    accInput.value = accuracy;
+
+    if (accuracy > maxAccuracy) {
+      locationReady = false;
+      geofenceBlocked = true;
+      locationStatus.textContent = `Location: BLOCKED. GPS accuracy ${Math.round(accuracy)} m is weaker than allowed ${Math.round(maxAccuracy)} m.`;
+      updateButtons();
+      return;
+    }
+
+    if (distance > radius) {
+      locationReady = false;
+      geofenceBlocked = true;
+      locationStatus.textContent = `Location: BLOCKED. You are ${Math.round(distance)} m from saved center (${centerLat.toFixed(7)}, ${centerLng.toFixed(7)}). Allowed radius is ${Math.round(radius)} m.`;
+      updateButtons();
+      return;
+    }
+
     locationReady = true;
-    locationStatus.textContent = `Location: ready (${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}), accuracy ${Math.round(pos.coords.accuracy)} m`;
+    geofenceBlocked = false;
+    locationStatus.textContent = `Location: OK. You are ${Math.round(distance)} m from saved center (${centerLat.toFixed(7)}, ${centerLng.toFixed(7)}). GPS accuracy ${Math.round(accuracy)} m. Allowed radius ${Math.round(radius)} m.`;
     checkSecurity();
     updateButtons();
   },(err)=>{
@@ -111,12 +165,17 @@ if (signOutBtn) {
 document.getElementById('attendanceForm').addEventListener('submit',(e)=>{
   if(!photoReady || !locationReady){
     e.preventDefault();
-    alert('Camera photo and location are both required.');
+    alert('Camera photo and valid location inside the saved allowed center are required.');
     return;
   }
   if(securityBlocked){
     e.preventDefault();
     alert('Attendance blocked because VPN/proxy/datacenter IP was detected.');
+    return;
+  }
+  if(geofenceBlocked){
+    e.preventDefault();
+    alert('Attendance blocked because you are outside the saved allowed location or GPS accuracy is weak.');
     return;
   }
   if(!actionInput.value){
@@ -125,5 +184,6 @@ document.getElementById('attendanceForm').addEventListener('submit',(e)=>{
   }
 });
 
+loadLocationConfig();
 checkSecurity();
 updateButtons();

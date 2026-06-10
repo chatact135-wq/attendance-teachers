@@ -101,3 +101,11 @@ Important: A normal website cannot 100% detect fake GPS/mock-location apps. For 
 - System Owner can manage all roles.
 
 If your Railway database already existed, open `/init-db` once after redeploy so the stronger default admin password is applied once.
+
+## Location Check Fix
+This version compares the user's live GPS location against the saved allowed center only:
+- Center latitude: 24.2651997
+- Center longitude: 55.7314160
+- Radius: 250 meters
+
+The browser also displays the calculated distance from that saved center before allowing Sign In/Sign Out. The server repeats the same check on submit, so users cannot bypass it by editing the page.
