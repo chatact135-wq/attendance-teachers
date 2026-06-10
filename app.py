@@ -26,7 +26,7 @@ db = SQLAlchemy(app)
 DEFAULT_CENTER_LAT = float(os.environ.get("ALLOWED_CENTER_LAT", "24.2651997"))
 DEFAULT_CENTER_LNG = float(os.environ.get("ALLOWED_CENTER_LNG", "55.7314160"))
 DEFAULT_RADIUS_M = float(os.environ.get("ALLOWED_RADIUS_METERS", "250"))
-DEFAULT_MAX_GPS_ACCURACY_M = float(os.environ.get("MAX_GPS_ACCURACY_METERS", "100"))
+DEFAULT_MAX_GPS_ACCURACY_M = float(os.environ.get("MAX_GPS_ACCURACY_METERS", "250"))
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -218,7 +218,7 @@ def submit_attendance():
         flash("GPS accuracy is required. Please allow precise location and try again.", "danger")
         return redirect(url_for("attendance"))
     if accuracy_f > max_accuracy:
-        flash(f"Blocked: GPS accuracy is too weak ({accuracy_f:.0f} m). Required accuracy: {max_accuracy:.0f} m or better. Try again near a window or from a phone.", "danger")
+        flash(f"Blocked: GPS accuracy is too weak ({accuracy_f:.0f} m). Allowed GPS accuracy limit: {max_accuracy:.0f} m. Try again near a window or from a phone.", "danger")
         return redirect(url_for("attendance"))
 
     allowed, dist = geofence_check(lat_f, lng_f)

@@ -65,3 +65,9 @@ Then open: `http://127.0.0.1:5000`
 Default database: SQLite file `instance/attendance.db` when using the default Flask SQLite URI.
 
 Photos are saved inside `static/captures/`. This is fine for testing, but for production with many users, use PostgreSQL for records and external image storage such as Cloudinary, S3, or Firebase Storage.
+
+
+Update in this version:
+- Allowed radius remains 250 meters.
+- GPS accuracy limit default changed from 100 meters to 250 meters.
+- Admin can dynamically edit both radius and GPS accuracy from Admin > Location Settings.
