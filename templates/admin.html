@@ -15,22 +15,22 @@
     {% if current_user.role == 'owner' %}<a class="button" href="{{ url_for('owner_manual_record') }}">Add Manual Record</a>{% endif %}
   </form>
   <table>
-    <thead><tr><th>Name</th><th>Action</th><th>System UAE Time</th><th>Type</th><th>Location</th><th>GPS Accuracy</th><th>Distance</th><th>IP</th><th>Photo</th>{% if current_user.role == 'owner' %}<th>Edit</th>{% endif %}</tr></thead>
+    <thead><tr><th>Name</th><th>Action</th><th>System UAE Time</th><th>Location</th><th>GPS Accuracy</th><th>Distance</th><th>IP</th><th>Security</th><th>Photo</th>{% if current_user.role == 'owner' %}<th>Edit</th>{% endif %}</tr></thead>
     <tbody>
       {% for r in records %}
       <tr>
         <td>{{ r.user.full_name }}</td>
         <td>{{ 'Sign In' if r.action == 'IN' else 'Sign Out' }}</td>
         <td>{{ r.timestamp_utc.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-        <td>{{ 'Manual / Owner' if r.is_manual else 'User self' }}</td>
         <td>{{ '%.6f'|format(r.latitude) }}, {{ '%.6f'|format(r.longitude) }}<br><a href="https://www.google.com/maps?q={{ r.latitude }},{{ r.longitude }}" target="_blank">Map</a></td>
         <td>{{ '%.0f'|format(r.accuracy or 0) }} m</td>
         <td>{{ '%.1f'|format(r.distance_m or 0) }} m</td>
-        <td>{{ r.ip_address or '' }}</td>
+        <td>{{ r.ip_address or '' }}<br><small>{{ r.ip_country or '' }} {{ r.ip_org or '' }}</small></td>
+        <td>{% if r.ip_is_vpn or r.ip_is_hosting %}<b>Risk</b><br>{% endif %}{{ r.security_status or 'OK' }}</td>
         <td><a href="{{ url_for('static', filename=r.photo_path) }}" target="_blank">Photo</a></td>
         {% if current_user.role == 'owner' %}<td><a href="{{ url_for('owner_edit_record', record_id=r.id) }}">Edit</a></td>{% endif %}
       </tr>
-      {% else %}<tr><td colspan="10">No records found.</td></tr>{% endfor %}
+      {% else %}<tr><td colspan="9">No records found.</td></tr>{% endfor %}
     </tbody>
   </table>
 </div>

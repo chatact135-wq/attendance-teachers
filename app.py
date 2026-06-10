@@ -8,10 +8,11 @@ from math import radians, sin, cos, sqrt, atan2
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, func
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import pandas as pd
+import requests
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 CAPTURE_DIR = os.path.join(BASE_DIR, "static", "captures")
@@ -63,6 +64,11 @@ class Attendance(db.Model):
     photo_path = db.Column(db.String(255), nullable=False)
     user_agent = db.Column(db.Text)
     ip_address = db.Column(db.String(80))
+    ip_country = db.Column(db.String(80))
+    ip_org = db.Column(db.String(255))
+    ip_is_vpn = db.Column(db.Boolean, default=False)
+    ip_is_hosting = db.Column(db.Boolean, default=False)
+    security_status = db.Column(db.String(255))
     is_manual = db.Column(db.Boolean, default=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     updated_by_id = db.Column(db.Integer, db.ForeignKey("user.id"))
@@ -94,6 +100,75 @@ def get_client_ip():
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.headers.get("X-Real-IP") or request.remote_addr or ""
+
+
+def is_private_or_local_ip(ip):
+    if not ip:
+        return True
+    return (
+        ip.startswith("127.") or ip.startswith("10.") or ip.startswith("192.168.") or
+        ip.startswith("172.16.") or ip.startswith("172.17.") or ip.startswith("172.18.") or
+        ip.startswith("172.19.") or ip.startswith("172.2") or ip.startswith("172.30.") or
+        ip.startswith("172.31.") or ip == "::1"
+    )
+
+def ip_security_check(ip):
+    """Best-effort VPN/proxy/datacenter check. Blocks only if settings say so.
+    Uses proxycheck.io when PROXYCHECK_API_KEY is set; otherwise falls back to ip-api.com.
+    """
+    result = {
+        "checked": False,
+        "blocked": False,
+        "reason": "IP security check not completed.",
+        "country": "",
+        "org": "",
+        "is_vpn": False,
+        "is_hosting": False,
+    }
+    enabled = get_setting("vpn_check_enabled", "1") == "1"
+    block_enabled = get_setting("vpn_block_enabled", "1") == "1"
+    block_hosting = get_setting("block_hosting_provider", "1") == "1"
+    block_non_uae = get_setting("block_non_uae_ip", "0") == "1"
+    if not enabled:
+        result["reason"] = "IP security check disabled by System Owner."
+        return result
+    if is_private_or_local_ip(ip):
+        result["reason"] = "Private/local IP. VPN check skipped."
+        return result
+    try:
+        key = os.environ.get("PROXYCHECK_API_KEY", "").strip()
+        if key:
+            url = f"https://proxycheck.io/v2/{ip}?key={key}&vpn=1&asn=1&risk=1&tag=attendance"
+            data = requests.get(url, timeout=4).json()
+            item = data.get(ip, {}) if isinstance(data, dict) else {}
+            result["checked"] = True
+            result["country"] = item.get("country", "") or item.get("isocode", "")
+            result["org"] = item.get("provider", "") or item.get("organisation", "") or item.get("asn", "")
+            proxy_value = str(item.get("proxy", "no")).lower()
+            result["is_vpn"] = proxy_value in ["yes", "true", "1"]
+            result["is_hosting"] = "hosting" in str(item.get("type", "")).lower() or "datacenter" in str(item.get("type", "")).lower()
+        else:
+            url = f"http://ip-api.com/json/{ip}?fields=status,message,countryCode,country,isp,org,as,proxy,hosting,mobile,query"
+            data = requests.get(url, timeout=4).json()
+            result["checked"] = data.get("status") == "success"
+            result["country"] = data.get("countryCode", "") or data.get("country", "")
+            result["org"] = data.get("org") or data.get("isp") or data.get("as", "")
+            result["is_vpn"] = bool(data.get("proxy"))
+            result["is_hosting"] = bool(data.get("hosting"))
+    except Exception as exc:
+        result["reason"] = f"IP security check failed: {exc}"
+        return result
+
+    reasons = []
+    if result["is_vpn"]:
+        reasons.append("VPN/proxy IP detected")
+    if block_hosting and result["is_hosting"]:
+        reasons.append("datacenter/hosting IP detected")
+    if block_non_uae and result["country"] and result["country"] not in ["AE", "United Arab Emirates"]:
+        reasons.append(f"IP country is {result['country']}, not UAE")
+    result["reason"] = "; ".join(reasons) if reasons else "IP security check passed."
+    result["blocked"] = block_enabled and bool(reasons)
+    return result
 
 def audit(action, target_type, target_id=None, details=""):
     actor_id = session.get("user_id")
@@ -218,7 +293,8 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        user = User.query.filter_by(username=username, is_active=True).first()
+        # Username login is case-insensitive. Password remains case-sensitive.
+        user = User.query.filter(func.lower(User.username) == username.lower(), User.is_active == True).first()
         if user and user.check_password(password):
             session["user_id"] = user.id
             return redirect(url_for("admin_dashboard" if user.role in ["admin", "owner"] else "attendance"))
@@ -236,14 +312,33 @@ def attendance():
     user = current_user()
     today_start = datetime.combine(uae_now().date(), datetime.min.time())
     records = Attendance.query.filter(Attendance.user_id == user.id, Attendance.timestamp_utc >= today_start).order_by(Attendance.timestamp_utc.desc()).all()
-    last_record = Attendance.query.filter_by(user_id=user.id).order_by(Attendance.timestamp_utc.desc()).first()
-    next_action = "OUT" if last_record and last_record.action == "IN" else "IN"
-    return render_template("attendance.html", records=records, next_action=next_action,
+    has_in_today = any(r.action == "IN" for r in records)
+    has_out_today = any(r.action == "OUT" for r in records)
+    can_sign_in = not has_in_today
+    can_sign_out = has_in_today and not has_out_today
+    return render_template("attendance.html", records=records, can_sign_in=can_sign_in, can_sign_out=can_sign_out,
                            center_lat=get_setting("center_lat", DEFAULT_CENTER_LAT),
                            center_lng=get_setting("center_lng", DEFAULT_CENTER_LNG),
                            radius_m=get_setting("radius_m", DEFAULT_RADIUS_M),
                            max_gps_accuracy_m=get_setting("max_gps_accuracy_m", DEFAULT_MAX_GPS_ACCURACY_M),
                            mode=get_setting("geofence_mode", "circle"))
+
+
+@app.route("/security-status")
+@login_required
+def security_status():
+    ip = get_client_ip()
+    risk = ip_security_check(ip)
+    return {
+        "ip": ip,
+        "checked": risk["checked"],
+        "blocked": risk["blocked"],
+        "reason": risk["reason"],
+        "country": risk["country"],
+        "org": risk["org"],
+        "is_vpn": risk["is_vpn"],
+        "is_hosting": risk["is_hosting"],
+    }
 
 @app.route("/submit-attendance", methods=["POST"])
 @login_required
@@ -274,6 +369,11 @@ def submit_attendance():
         flash("Invalid location data. Please refresh and try again.", "danger")
         return redirect(url_for("attendance"))
 
+    ip_risk = ip_security_check(get_client_ip())
+    if ip_risk.get("blocked"):
+        flash(f"Blocked: VPN/proxy/datacenter IP detected. {ip_risk.get('reason')} Please turn off VPN and use the normal local network.", "danger")
+        return redirect(url_for("attendance"))
+
     max_accuracy = float(get_setting("max_gps_accuracy_m", DEFAULT_MAX_GPS_ACCURACY_M))
     if accuracy_f is None:
         flash("GPS accuracy is required. Please allow precise location and try again.", "danger")
@@ -287,9 +387,18 @@ def submit_attendance():
         flash(f"Blocked: you are outside the allowed location. Distance from center: {dist:.1f} m", "danger")
         return redirect(url_for("attendance"))
 
-    last_record = Attendance.query.filter_by(user_id=user.id).order_by(Attendance.timestamp_utc.desc()).first()
-    if last_record and last_record.action == action:
-        flash(f"You already signed {'in' if action == 'IN' else 'out'} last. Next action is different.", "warning")
+    today_start = datetime.combine(system_uae_time.date(), datetime.min.time())
+    today_records = Attendance.query.filter(Attendance.user_id == user.id, Attendance.timestamp_utc >= today_start).all()
+    has_in_today = any(r.action == "IN" for r in today_records)
+    has_out_today = any(r.action == "OUT" for r in today_records)
+    if action == "IN" and has_in_today:
+        flash("Blocked: you already signed in today. Duplicate sign-in is not allowed.", "warning")
+        return redirect(url_for("attendance"))
+    if action == "OUT" and not has_in_today:
+        flash("Blocked: you cannot sign out because you did not sign in today.", "warning")
+        return redirect(url_for("attendance"))
+    if action == "OUT" and has_out_today:
+        flash("Blocked: you already signed out today. Duplicate sign-out is not allowed.", "warning")
         return redirect(url_for("attendance"))
 
     header, encoded = photo_data.split(",", 1)
@@ -310,6 +419,11 @@ def submit_attendance():
         photo_path=f"captures/{filename}",
         user_agent=request.headers.get("User-Agent", ""),
         ip_address=get_client_ip(),
+        ip_country=ip_risk.get("country", ""),
+        ip_org=ip_risk.get("org", ""),
+        ip_is_vpn=ip_risk.get("is_vpn", False),
+        ip_is_hosting=ip_risk.get("is_hosting", False),
+        security_status=ip_risk.get("reason", ""),
         timestamp_utc=system_uae_time,
         is_manual=False,
     )
@@ -370,6 +484,11 @@ def owner_manual_record():
             photo_path=f"captures/{filename}",
             user_agent="Manual owner entry",
             ip_address=get_client_ip(),
+            ip_country="OWNER_MANUAL",
+            ip_org="Owner manual entry",
+            ip_is_vpn=False,
+            ip_is_hosting=False,
+            security_status="Owner manual entry - security bypass recorded in audit log",
             is_manual=True,
             created_by_id=session["user_id"],
             note=note,
@@ -435,8 +554,8 @@ def admin_users():
             role = "user"
         if not username or not full_name or not password:
             flash("Username, full name and password are required.", "danger")
-        elif User.query.filter_by(username=username).first():
-            flash("Username already exists.", "danger")
+        elif User.query.filter(func.lower(User.username) == username.lower()).first():
+            flash("Username already exists. Usernames are not case-sensitive.", "danger")
         else:
             u = User(username=username, full_name=full_name, role=role)
             u.set_password(password)
@@ -458,7 +577,11 @@ def admin_settings():
         set_setting("radius_m", request.form.get("radius_m", DEFAULT_RADIUS_M))
         set_setting("max_gps_accuracy_m", request.form.get("max_gps_accuracy_m", DEFAULT_MAX_GPS_ACCURACY_M))
         set_setting("polygon", request.form.get("polygon", ""))
-        audit("update_settings", "settings", None, "Location/geofence settings updated")
+        set_setting("vpn_check_enabled", "1" if request.form.get("vpn_check_enabled") else "0")
+        set_setting("vpn_block_enabled", "1" if request.form.get("vpn_block_enabled") else "0")
+        set_setting("block_hosting_provider", "1" if request.form.get("block_hosting_provider") else "0")
+        set_setting("block_non_uae_ip", "1" if request.form.get("block_non_uae_ip") else "0")
+        audit("update_settings", "settings", None, "Location/geofence/security settings updated")
         db.session.commit()
         flash("Location settings saved.", "success")
     return render_template("settings.html",
@@ -467,7 +590,11 @@ def admin_settings():
                            center_lng=get_setting("center_lng", DEFAULT_CENTER_LNG),
                            radius_m=get_setting("radius_m", DEFAULT_RADIUS_M),
                            max_gps_accuracy_m=get_setting("max_gps_accuracy_m", DEFAULT_MAX_GPS_ACCURACY_M),
-                           polygon=get_setting("polygon", ""))
+                           polygon=get_setting("polygon", ""),
+                           vpn_check_enabled=get_setting("vpn_check_enabled", "1"),
+                           vpn_block_enabled=get_setting("vpn_block_enabled", "1"),
+                           block_hosting_provider=get_setting("block_hosting_provider", "1"),
+                           block_non_uae_ip=get_setting("block_non_uae_ip", "0"))
 
 @app.route("/admin/export")
 @view_required
@@ -485,6 +612,11 @@ def export_excel():
             "Accuracy meters": r.accuracy,
             "Distance from allowed center meters": round(r.distance_m or 0, 2),
             "IP Address": r.ip_address,
+            "IP Country": r.ip_country or "",
+            "IP Organization": r.ip_org or "",
+            "VPN/Proxy Detected": "Yes" if r.ip_is_vpn else "No",
+            "Datacenter/Hosting Detected": "Yes" if r.ip_is_hosting else "No",
+            "Security Status": r.security_status or "",
             "Manual Record": "Yes" if r.is_manual else "No",
             "Created By": r.created_by.full_name if r.created_by else "User self sign-in/out",
             "Updated By": r.updated_by.full_name if r.updated_by else "",
@@ -516,6 +648,16 @@ def ensure_schema_upgrades():
             "updated_by_id": "ALTER TABLE attendance ADD COLUMN updated_by_id INTEGER",
             "updated_at": "ALTER TABLE attendance ADD COLUMN updated_at TIMESTAMP",
             "note": "ALTER TABLE attendance ADD COLUMN note TEXT",
+            "ip_country": "ALTER TABLE attendance ADD COLUMN ip_country VARCHAR(80)",
+            "ip_org": "ALTER TABLE attendance ADD COLUMN ip_org VARCHAR(255)",
+            "ip_is_vpn": "ALTER TABLE attendance ADD COLUMN ip_is_vpn BOOLEAN DEFAULT 0",
+            "ip_is_hosting": "ALTER TABLE attendance ADD COLUMN ip_is_hosting BOOLEAN DEFAULT 0",
+            "security_status": "ALTER TABLE attendance ADD COLUMN security_status VARCHAR(255)",
+            "ip_country": "ALTER TABLE attendance ADD COLUMN ip_country VARCHAR(80)",
+            "ip_org": "ALTER TABLE attendance ADD COLUMN ip_org VARCHAR(255)",
+            "ip_is_vpn": "ALTER TABLE attendance ADD COLUMN ip_is_vpn BOOLEAN DEFAULT FALSE",
+            "ip_is_hosting": "ALTER TABLE attendance ADD COLUMN ip_is_hosting BOOLEAN DEFAULT FALSE",
+            "security_status": "ALTER TABLE attendance ADD COLUMN security_status VARCHAR(255)",
         }
     else:
         ddl = {
@@ -541,13 +683,17 @@ def init_db():
         set_setting("max_gps_accuracy_m", DEFAULT_MAX_GPS_ACCURACY_M)
         set_setting("geofence_mode", "circle")
         set_setting("polygon", "")
+        set_setting("vpn_check_enabled", "1")
+        set_setting("vpn_block_enabled", "1")
+        set_setting("block_hosting_provider", "1")
+        set_setting("block_non_uae_ip", "0")
         db.session.commit()
-    if not User.query.filter_by(username="admin").first():
+    if not User.query.filter(func.lower(User.username) == "admin").first():
         admin = User(username="admin", full_name="System Admin", role="admin")
         admin.set_password(os.environ.get("ADMIN_PASSWORD", "admin123"))
         db.session.add(admin)
         db.session.commit()
-    if not User.query.filter_by(username="Ahmad").first():
+    if not User.query.filter(func.lower(User.username) == "ahmad").first():
         owner = User(username="Ahmad", full_name="Ahmad - System Owner", role="owner")
         owner.set_password(os.environ.get("OWNER_PASSWORD", "Ahna@@@$$$"))
         db.session.add(owner)

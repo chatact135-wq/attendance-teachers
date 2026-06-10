@@ -74,3 +74,20 @@ Update in this version:
 
 ## Time handling
 This version does not trust the user's device time. Sign-in and sign-out timestamps are generated on the server using UAE time zone only (`Asia/Dubai`, UTC+4). Admin pages and Excel export display System UAE Time.
+
+## VPN / Proxy / Fake GPS Protection Update
+
+This version adds a server-side IP security check:
+- Blocks many VPN/proxy IP addresses.
+- Blocks datacenter/hosting IP addresses when enabled.
+- Optionally blocks non-UAE IP addresses.
+- Shows a warning/popup on the attendance page when IP risk is detected.
+- Stores IP country, organization, VPN/proxy risk, hosting risk, and security status in attendance records and Excel export.
+
+For stronger VPN detection, create a free/paid ProxyCheck account and add this Railway environment variable:
+
+PROXYCHECK_API_KEY=your_key_here
+
+Without PROXYCHECK_API_KEY, the system uses a basic fallback IP check.
+
+Important: A normal website cannot 100% detect fake GPS/mock-location apps. For highest security, combine GPS + camera photo + VPN/IP check + daily QR code inside the school/office.

@@ -14,7 +14,16 @@
     <label>Allowed Radius Meters (distance from center, use 250 for testing)</label><input name="radius_m" value="{{ radius_m }}" required>
     <label>Maximum Accepted GPS Accuracy Meters (Dynamic - set 250 for testing)</label><input name="max_gps_accuracy_m" value="{{ max_gps_accuracy_m }}" required>
     <label>Polygon / Square Corners</label>
-    <textarea name="polygon" rows="5" placeholder="24.0001,54.0001;24.0001,54.0009;24.0009,54.0009;24.0009,54.0001">{{ polygon }}</textarea>
+    <textarea name="polygon" rows="5" placeholder="24.0001,54.0001;24.0001,55.0009;24.0009,55.0009;24.0009,55.0001">{{ polygon }}</textarea>
+
+    <h2>VPN / Proxy Protection</h2>
+    <p class="muted">This is a server-side IP check. It can block many VPN/proxy/datacenter IP addresses, but no website can detect every fake GPS app 100%.</p>
+    <label><input type="checkbox" name="vpn_check_enabled" value="1" {% if vpn_check_enabled == '1' %}checked{% endif %}> Enable VPN/proxy IP check</label>
+    <label><input type="checkbox" name="vpn_block_enabled" value="1" {% if vpn_block_enabled == '1' %}checked{% endif %}> Block sign in/out when VPN/proxy risk is detected</label>
+    <label><input type="checkbox" name="block_hosting_provider" value="1" {% if block_hosting_provider == '1' %}checked{% endif %}> Block datacenter/hosting IP addresses</label>
+    <label><input type="checkbox" name="block_non_uae_ip" value="1" {% if block_non_uae_ip == '1' %}checked{% endif %}> Block if IP country is not UAE</label>
+    <p class="muted">For stronger detection, add Railway variable <b>PROXYCHECK_API_KEY</b>. Without it, the app uses a basic free IP check fallback.</p>
+
     <button class="primary" type="submit">Save Settings</button>
   </form>
 </div>

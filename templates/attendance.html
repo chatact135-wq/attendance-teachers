@@ -3,10 +3,11 @@
 <div class="grid">
   <section class="card">
     <h1>Hello, {{ current_user.full_name }}</h1>
-    <p class="muted">Camera photo and location are required. The button stays locked until both are captured.</p>
+    <p class="muted">Camera photo and location are required. Select Sign In or Sign Out after both are captured.</p>
 
     <div class="status-box">
-      <div><b>Next Action:</b> {{ 'Sign In' if next_action == 'IN' else 'Sign Out' }}</div>
+      <div><b>Today Sign In:</b> {{ 'Available' if can_sign_in else 'Already completed' }}</div>
+      <div><b>Today Sign Out:</b> {{ 'Available' if can_sign_out else 'Not available yet / already completed' }}</div>
       <div><b>Location Mode:</b> {{ mode }}</div>
       <div><b>Allowed center:</b> {{ center_lat }}, {{ center_lng }}</div>
       <div><b>Radius:</b> {{ radius_m }} meters</div>
@@ -25,15 +26,19 @@
 
     <p id="cameraStatus" class="muted">Camera: not ready</p>
     <p id="locationStatus" class="muted">Location: not ready</p>
+    <p id="securityStatus" class="muted">Security: checking IP/VPN status...</p>
 
     <form method="post" action="{{ url_for('submit_attendance') }}" id="attendanceForm">
-      <input type="hidden" name="action" value="{{ next_action }}">
+      <input type="hidden" name="action" id="actionInput" value="">
       <input type="hidden" name="device_time" id="device_time">
       <input type="hidden" name="latitude" id="latitude">
       <input type="hidden" name="longitude" id="longitude">
       <input type="hidden" name="accuracy" id="accuracy">
       <input type="hidden" name="photo_data" id="photo_data">
-      <button id="submitBtn" class="primary big" type="submit" disabled>{{ 'Sign In' if next_action == 'IN' else 'Sign Out' }}</button>
+      <div class="actions">
+        <button id="signInBtn" class="primary big" type="submit" data-action="IN" {% if not can_sign_in %}disabled{% endif %}>Sign In</button>
+        <button id="signOutBtn" class="primary big" type="submit" data-action="OUT" {% if not can_sign_out %}disabled{% endif %}>Sign Out</button>
+      </div>
     </form>
   </section>
 
@@ -55,5 +60,9 @@
     </table>
   </section>
 </div>
+<script>
+  window.CAN_SIGN_IN = {{ 'true' if can_sign_in else 'false' }};
+  window.CAN_SIGN_OUT = {{ 'true' if can_sign_out else 'false' }};
+</script>
 <script src="{{ url_for('static', filename='attendance.js') }}"></script>
 {% endblock %}
