@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card login-card">
+  <h1>Sign In</h1>
+  <p class="muted">Default admin after first deploy: <b>admin</b> / <b>admin123</b></p>
+  <form method="post">
+    <label>Username</label>
+    <input name="username" required autocomplete="username">
+    <label>Password</label>
+    <input name="password" type="password" required autocomplete="current-password">
+    <button class="primary" type="submit">Login</button>
+  </form>
+</div>
+{% endblock %}

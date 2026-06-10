@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+  <h1>Admin Attendance Dashboard</h1>
+  <form class="filter" method="get">
+    <label>Date</label><input type="date" name="date" value="{{ q_date }}">
+    <label>User</label>
+    <select name="user_id">
+      <option value="">All</option>
+      {% for u in users %}<option value="{{ u.id }}" {% if user_id and user_id|int == u.id %}selected{% endif %}>{{ u.full_name }}</option>{% endfor %}
+    </select>
+    <button class="secondary" type="submit">Filter</button>
+    <a class="button" href="{{ url_for('export_excel') }}">Export Excel</a>
+  </form>
+  <table>
+    <thead><tr><th>Name</th><th>Action</th><th>Device Time</th><th>Server UTC</th><th>Location</th><th>GPS Accuracy</th><th>Distance</th><th>Photo</th></tr></thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td>{{ r.user.full_name }}</td>
+        <td>{{ 'Sign In' if r.action == 'IN' else 'Sign Out' }}</td>
+        <td>{{ r.device_time }}</td>
+        <td>{{ r.timestamp_utc.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td>{{ '%.6f'|format(r.latitude) }}, {{ '%.6f'|format(r.longitude) }}<br><a href="https://www.google.com/maps?q={{ r.latitude }},{{ r.longitude }}" target="_blank">Map</a></td>
+        <td>{{ '%.0f'|format(r.accuracy or 0) }} m</td>
+        <td>{{ '%.1f'|format(r.distance_m or 0) }} m</td>
+        <td><a href="{{ url_for('static', filename=r.photo_path) }}" target="_blank">Photo</a></td>
+      </tr>
+      {% else %}<tr><td colspan="8">No records found.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

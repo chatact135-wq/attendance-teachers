@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="grid">
+<section class="card">
+  <h1>Add User</h1>
+  <form method="post">
+    <label>Username</label><input name="username" required>
+    <label>Full Name</label><input name="full_name" required>
+    <label>Password</label><input name="password" type="password" required>
+    <label>Role</label><select name="role"><option value="user">User</option><option value="admin">Admin</option></select>
+    <button class="primary" type="submit">Create User</button>
+  </form>
+</section>
+<section class="card">
+  <h2>Users</h2>
+  <table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Active</th></tr></thead><tbody>
+  {% for u in users %}<tr><td>{{ u.full_name }}</td><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ 'Yes' if u.is_active else 'No' }}</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+</div>
+{% endblock %}

@@ -1,0 +1,67 @@
+# Geo Attendance App
+
+Ready-to-publish Flask attendance system with:
+
+- User sign in / sign out
+- Required browser location permission
+- Required camera photo before every sign in/out
+- Location restriction by circle radius or square/polygon
+- Admin dashboard for records
+- Admin user creation
+- Admin location settings
+- GPS accuracy blocking
+- Google Maps link for each record
+- Excel export
+- Saved photos for every sign in/out
+
+## Default login
+
+Username: `admin`  
+Password: `admin123`
+
+Change this after first login by creating a new admin user or setting `ADMIN_PASSWORD` before first run.
+
+## Deploy on Render
+
+1. Upload this folder to GitHub.
+2. Create a new Render Web Service.
+3. Build command: `pip install -r requirements.txt`
+4. Start command: `gunicorn app:app`
+5. Add environment variable:
+   - `SECRET_KEY` = any long random text
+   - Optional: `ADMIN_PASSWORD` = your first admin password
+6. Open `/init-db` once if needed.
+7. Login at `/login`.
+8. Default location is already set to 24.2651997, 55.7314160 with a 250 meter radius. You can change it from Admin > Location Settings.
+
+## Important
+
+- Browser camera and location work best on HTTPS. Render provides HTTPS.
+- Laptop location may be less accurate than phone GPS. This version blocks readings worse than 100 meters accuracy by default.
+- Circle radius is more reliable than exact square.
+- For square mode, enter corners like:
+
+`24.0001,54.0001;24.0001,54.0009;24.0009,54.0009;24.0009,54.0001`
+
+## Local test
+
+```bash
+pip install -r requirements.txt
+python app.py
+```
+
+Then open: `http://127.0.0.1:5000`
+
+
+## Default geofence in this package
+
+- Latitude: 24.2651997
+- Longitude: 55.7314160
+- Radius: 250 meters
+- Maximum accepted GPS accuracy: 100 meters
+
+## Database and photo storage
+
+Default database: SQLite file `instance/attendance.db` when using the default Flask SQLite URI.
+
+Photos are saved inside `static/captures/`. This is fine for testing, but for production with many users, use PostgreSQL for records and external image storage such as Cloudinary, S3, or Firebase Storage.

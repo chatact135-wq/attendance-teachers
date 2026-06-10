@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="grid">
+  <section class="card">
+    <h1>Hello, {{ current_user.full_name }}</h1>
+    <p class="muted">Camera photo and location are required. The button stays locked until both are captured.</p>
+
+    <div class="status-box">
+      <div><b>Next Action:</b> {{ 'Sign In' if next_action == 'IN' else 'Sign Out' }}</div>
+      <div><b>Location Mode:</b> {{ mode }}</div>
+      <div><b>Allowed center:</b> {{ center_lat }}, {{ center_lng }}</div>
+      <div><b>Radius:</b> {{ radius_m }} meters</div>
+      <div><b>Required GPS accuracy:</b> {{ max_gps_accuracy_m }} meters or better</div>
+    </div>
+
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas" style="display:none"></canvas>
+    <img id="preview" class="preview" alt="Captured photo preview" style="display:none">
+
+    <div class="actions">
+      <button id="startCamera" class="secondary" type="button">Allow Camera</button>
+      <button id="capturePhoto" class="secondary" type="button" disabled>Take Required Photo</button>
+      <button id="getLocation" class="secondary" type="button">Allow Location</button>
+    </div>
+
+    <p id="cameraStatus" class="muted">Camera: not ready</p>
+    <p id="locationStatus" class="muted">Location: not ready</p>
+
+    <form method="post" action="{{ url_for('submit_attendance') }}" id="attendanceForm">
+      <input type="hidden" name="action" value="{{ next_action }}">
+      <input type="hidden" name="device_time" id="device_time">
+      <input type="hidden" name="latitude" id="latitude">
+      <input type="hidden" name="longitude" id="longitude">
+      <input type="hidden" name="accuracy" id="accuracy">
+      <input type="hidden" name="photo_data" id="photo_data">
+      <button id="submitBtn" class="primary big" type="submit" disabled>{{ 'Sign In' if next_action == 'IN' else 'Sign Out' }}</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Today Records</h2>
+    <table>
+      <thead><tr><th>Action</th><th>Device Time</th><th>Photo</th></tr></thead>
+      <tbody>
+      {% for r in records %}
+        <tr>
+          <td>{{ 'In' if r.action == 'IN' else 'Out' }}</td>
+          <td>{{ r.device_time }}</td>
+          <td><a href="{{ url_for('static', filename=r.photo_path) }}" target="_blank">View</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3">No records today.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+<script src="{{ url_for('static', filename='attendance.js') }}"></script>
+{% endblock %}

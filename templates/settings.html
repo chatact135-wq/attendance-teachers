@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card">
+  <h1>Location Settings</h1>
+  <p class="muted">Circle is recommended. For a square, choose polygon and enter four corners as lat,lng separated by semicolon.</p>
+  <form method="post">
+    <label>Mode</label>
+    <select name="geofence_mode">
+      <option value="circle" {% if geofence_mode == 'circle' %}selected{% endif %}>Circle radius</option>
+      <option value="polygon" {% if geofence_mode == 'polygon' %}selected{% endif %}>Square / polygon</option>
+    </select>
+    <label>Center Latitude</label><input name="center_lat" value="{{ center_lat }}" required>
+    <label>Center Longitude</label><input name="center_lng" value="{{ center_lng }}" required>
+    <label>Allowed Radius Meters</label><input name="radius_m" value="{{ radius_m }}" required>
+    <label>Maximum Accepted GPS Accuracy Meters</label><input name="max_gps_accuracy_m" value="{{ max_gps_accuracy_m }}" required>
+    <label>Polygon / Square Corners</label>
+    <textarea name="polygon" rows="5" placeholder="24.0001,54.0001;24.0001,54.0009;24.0009,54.0009;24.0009,54.0001">{{ polygon }}</textarea>
+    <button class="primary" type="submit">Save Settings</button>
+  </form>
+</div>
+{% endblock %}
