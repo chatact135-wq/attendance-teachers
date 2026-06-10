@@ -258,6 +258,18 @@ def view_required(fn):
         return fn(*args, **kwargs)
     return wrapper
 
+def user_manage_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        user = User.query.get(session["user_id"])
+        if not user or user.role not in ["admin", "owner"]:
+            flash("Admin access only.", "danger")
+            return redirect(url_for("attendance"))
+        return fn(*args, **kwargs)
+    return wrapper
+
 def owner_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -436,17 +448,17 @@ def submit_attendance():
 @view_required
 def admin_dashboard():
     q_date = request.args.get("date", "")
-    user_id = request.args.get("user_id", "")
+    search = request.args.get("search", "").strip()
     query = Attendance.query.join(User, Attendance.user_id == User.id)
     if q_date:
         start = datetime.strptime(q_date, "%Y-%m-%d")
         end = datetime.combine(start.date(), datetime.max.time())
         query = query.filter(Attendance.timestamp_utc >= start, Attendance.timestamp_utc <= end)
-    if user_id:
-        query = query.filter(Attendance.user_id == int(user_id))
+    if search:
+        like = f"%{search.lower()}%"
+        query = query.filter((func.lower(User.username).like(like)) | (func.lower(User.full_name).like(like)))
     records = query.order_by(Attendance.timestamp_utc.desc()).limit(500).all()
-    users = User.query.order_by(User.full_name).all()
-    return render_template("admin.html", records=records, users=users, q_date=q_date, user_id=user_id)
+    return render_template("admin.html", records=records, q_date=q_date, search=search)
 
 @app.route("/owner/manual", methods=["GET", "POST"])
 @owner_required
@@ -543,14 +555,18 @@ def owner_audit():
     return render_template("audit.html", logs=logs)
 
 @app.route("/admin/users", methods=["GET", "POST"])
-@owner_required
+@user_manage_required
 def admin_users():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         full_name = request.form.get("full_name", "").strip()
         password = request.form.get("password", "")
+        current = current_user()
         role = request.form.get("role", "user")
-        if role not in ["user", "admin", "owner"]:
+        # Normal Admin can add regular users only. System Owner can create admin/owner accounts.
+        if current.role != "owner":
+            role = "user"
+        elif role not in ["user", "admin", "owner"]:
             role = "user"
         if not username or not full_name or not password:
             flash("Username, full name and password are required.", "danger")
@@ -566,6 +582,27 @@ def admin_users():
             flash("User created.", "success")
     users = User.query.order_by(User.created_at.desc()).all()
     return render_template("users.html", users=users)
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@user_manage_required
+def delete_user(user_id):
+    current = current_user()
+    target = User.query.get_or_404(user_id)
+    if target.id == current.id:
+        flash("You cannot delete your own account while logged in.", "danger")
+        return redirect(url_for("admin_users"))
+    if target.role == "owner" and current.role != "owner":
+        flash("Only System Owner can delete an owner account.", "danger")
+        return redirect(url_for("admin_users"))
+    if current.role != "owner" and target.role != "user":
+        flash("Admin can delete normal users only.", "danger")
+        return redirect(url_for("admin_users"))
+    # Keep historical attendance linked. Deactivate instead of hard delete.
+    target.is_active = False
+    audit("deactivate_user", "user", target.id, f"Deactivated username={target.username}")
+    db.session.commit()
+    flash("User deactivated. Historical attendance records are kept.", "success")
+    return redirect(url_for("admin_users"))
 
 @app.route("/admin/settings", methods=["GET", "POST"])
 @owner_required

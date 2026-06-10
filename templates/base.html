@@ -16,9 +16,11 @@
         <a href="{{ url_for('admin_dashboard') }}">Dashboard</a>
         <a href="{{ url_for('export_excel') }}">Export</a>
       {% endif %}
+      {% if current_user.role in ['admin','owner'] %}
+        <a href="{{ url_for('admin_users') }}">Users</a>
+      {% endif %}
       {% if current_user.role == 'owner' %}
         <a href="{{ url_for('owner_manual_record') }}">Owner Manual Entry</a>
-        <a href="{{ url_for('admin_users') }}">Users</a>
         <a href="{{ url_for('admin_settings') }}">Location Settings</a>
         <a href="{{ url_for('owner_audit') }}">Audit Log</a>
       {% endif %}

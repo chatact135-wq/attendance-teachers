@@ -5,22 +5,17 @@
   <p class="muted">Admin can view/export. System Owner can also add and edit records.</p>
   <form class="filter" method="get">
     <label>Date</label><input type="date" name="date" value="{{ q_date }}">
-    <label>User</label>
-    <select name="user_id">
-      <option value="">All</option>
-      {% for u in users %}<option value="{{ u.id }}" {% if user_id and user_id|int == u.id %}selected{% endif %}>{{ u.full_name }}</option>{% endfor %}
-    </select>
+    <label>Search Name/Username</label><input name="search" value="{{ search }}" placeholder="Type name or username">
     <button class="secondary" type="submit">Filter</button>
     <a class="button" href="{{ url_for('export_excel') }}">Export Excel</a>
     {% if current_user.role == 'owner' %}<a class="button" href="{{ url_for('owner_manual_record') }}">Add Manual Record</a>{% endif %}
   </form>
   <table>
-    <thead><tr><th>Name</th><th>Action</th><th>System UAE Time</th><th>Location</th><th>GPS Accuracy</th><th>Distance</th><th>IP</th><th>Security</th><th>Photo</th>{% if current_user.role == 'owner' %}<th>Edit</th>{% endif %}</tr></thead>
+    <thead><tr><th>Name</th><th>System UAE Time</th><th>Location</th><th>GPS Accuracy</th><th>Distance</th><th>IP</th><th>Security</th><th>Photo</th>{% if current_user.role == 'owner' %}<th>Edit</th>{% endif %}</tr></thead>
     <tbody>
       {% for r in records %}
       <tr>
         <td>{{ r.user.full_name }}</td>
-        <td>{{ 'Sign In' if r.action == 'IN' else 'Sign Out' }}</td>
         <td>{{ r.timestamp_utc.strftime('%Y-%m-%d %H:%M:%S') }}</td>
         <td>{{ '%.6f'|format(r.latitude) }}, {{ '%.6f'|format(r.longitude) }}<br><a href="https://www.google.com/maps?q={{ r.latitude }},{{ r.longitude }}" target="_blank">Map</a></td>
         <td>{{ '%.0f'|format(r.accuracy or 0) }} m</td>

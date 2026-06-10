@@ -3,24 +3,29 @@
 <div class="grid">
 <section class="card">
   <h1>Add User</h1>
-  <p class="muted">Only System Owner can create users and admins.</p>
+  <p class="muted">Admin can add/delete normal users. System Owner can also create admins/owners.</p>
   <form method="post">
     <label>Username</label><input name="username" required>
     <label>Full Name</label><input name="full_name" required>
     <label>Password</label><input name="password" type="password" required>
-    <label>Role</label>
-    <select name="role">
-      <option value="user">User</option>
-      <option value="admin">Admin - view/export only</option>
-      <option value="owner">System Owner - full control</option>
-    </select>
+    {% if current_user.role == 'owner' %}
+      <label>Role</label>
+      <select name="role">
+        <option value="user">User</option>
+        <option value="admin">Admin - view/export + user management</option>
+        <option value="owner">System Owner - full control</option>
+      </select>
+    {% else %}
+      <input type="hidden" name="role" value="user">
+      <p class="muted">New accounts created by Admin will be normal users.</p>
+    {% endif %}
     <button class="primary" type="submit">Create User</button>
   </form>
 </section>
 <section class="card">
   <h2>Users</h2>
-  <table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Active</th></tr></thead><tbody>
-  {% for u in users %}<tr><td>{{ u.full_name }}</td><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ 'Yes' if u.is_active else 'No' }}</td></tr>{% endfor %}
+  <table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Active</th><th>Action</th></tr></thead><tbody>
+  {% for u in users %}<tr><td>{{ u.full_name }}</td><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ 'Yes' if u.is_active else 'No' }}</td><td>{% if u.is_active and u.id != current_user.id and (current_user.role == 'owner' or u.role == 'user') %}<form method="post" action="{{ url_for('delete_user', user_id=u.id) }}" onsubmit="return confirm('Deactivate this user? Attendance history will be kept.');"><button class="danger" type="submit">Delete</button></form>{% else %}<span class="muted">Protected</span>{% endif %}</td></tr>{% endfor %}
   </tbody></table>
 </section>
 </div>
