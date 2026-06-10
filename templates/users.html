@@ -3,7 +3,11 @@
 <div class="grid">
 <section class="card">
   <h1>Add User</h1>
-  <p class="muted">Admin can add/delete normal users. System Owner can also create admins/owners.</p>
+  {% if current_user.role == 'owner' %}
+    <p class="muted">System Owner can create users, admins, and owners.</p>
+  {% else %}
+    <p class="muted">Admin can add normal users only.</p>
+  {% endif %}
   <form method="post">
     <label>Username</label><input name="username" required>
     <label>Full Name</label><input name="full_name" required>
@@ -17,15 +21,47 @@
       </select>
     {% else %}
       <input type="hidden" name="role" value="user">
-      <p class="muted">New accounts created by Admin will be normal users.</p>
     {% endif %}
     <button class="primary" type="submit">Create User</button>
   </form>
 </section>
 <section class="card">
   <h2>Users</h2>
-  <table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Active</th><th>Action</th></tr></thead><tbody>
-  {% for u in users %}<tr><td>{{ u.full_name }}</td><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ 'Yes' if u.is_active else 'No' }}</td><td>{% if u.is_active and u.id != current_user.id and (current_user.role == 'owner' or u.role == 'user') %}<form method="post" action="{{ url_for('delete_user', user_id=u.id) }}" onsubmit="return confirm('Deactivate this user? Attendance history will be kept.');"><button class="danger" type="submit">Delete</button></form>{% else %}<span class="muted">Protected</span>{% endif %}</td></tr>{% endfor %}
+  <form method="get" class="inline-form">
+    <label>Role filter</label>
+    {% if current_user.role == 'owner' %}
+      <select name="role" onchange="this.form.submit()">
+        <option value="all" {{ 'selected' if role_filter == 'all' else '' }}>All roles</option>
+        <option value="user" {{ 'selected' if role_filter == 'user' else '' }}>Users only</option>
+        <option value="admin" {{ 'selected' if role_filter == 'admin' else '' }}>Admins only</option>
+        <option value="owner" {{ 'selected' if role_filter == 'owner' else '' }}>Owners only</option>
+      </select>
+    {% else %}
+      <select disabled><option>Users only</option></select>
+      <input type="hidden" name="role" value="user">
+    {% endif %}
+  </form>
+  <table><thead><tr><th>Name</th><th>Username</th>{% if current_user.role == 'owner' %}<th>Role</th>{% endif %}<th>Active</th><th>Reset Password</th><th>Action</th></tr></thead><tbody>
+  {% for u in users %}
+  <tr>
+    <td>{{ u.full_name }}</td>
+    <td>{{ u.username }}</td>
+    {% if current_user.role == 'owner' %}<td>{{ u.role }}</td>{% endif %}
+    <td>{{ 'Yes' if u.is_active else 'No' }}</td>
+    <td>
+      {% if u.is_active and u.id != current_user.id and (current_user.role == 'owner' or u.role == 'user') %}
+      <form method="post" action="{{ url_for('reset_user_password', user_id=u.id) }}" class="inline-form" onsubmit="return confirm('Reset password for this user?');">
+        <input name="new_password" type="password" placeholder="New password" required minlength="8">
+        <input name="confirm_password" type="password" placeholder="Confirm" required minlength="8">
+        <button type="submit">Reset</button>
+      </form>
+      {% else %}
+        <span class="muted">Protected</span>
+      {% endif %}
+    </td>
+    <td>{% if u.is_active and u.id != current_user.id and (current_user.role == 'owner' or u.role == 'user') %}<form method="post" action="{{ url_for('delete_user', user_id=u.id) }}" onsubmit="return confirm('Deactivate this user? Attendance history will be kept.');"><button class="danger" type="submit">Delete</button></form>{% else %}<span class="muted">Protected</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
   </tbody></table>
 </section>
 </div>

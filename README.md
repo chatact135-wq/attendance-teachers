@@ -91,3 +91,13 @@ PROXYCHECK_API_KEY=your_key_here
 Without PROXYCHECK_API_KEY, the system uses a basic fallback IP check.
 
 Important: A normal website cannot 100% detect fake GPS/mock-location apps. For highest security, combine GPS + camera photo + VPN/IP check + daily QR code inside the school/office.
+
+## Updated admin/user permissions
+- Default admin username: `admin`
+- Default admin password: `Admin@UAE#2026!R7pQ`
+- Admin can create normal users only.
+- Admin can view/filter normal users only on the user management page.
+- Admin can reset passwords for normal users only, not System Owner accounts.
+- System Owner can manage all roles.
+
+If your Railway database already existed, open `/init-db` once after redeploy so the stronger default admin password is applied once.

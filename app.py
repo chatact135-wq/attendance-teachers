@@ -35,6 +35,8 @@ DEFAULT_CENTER_LAT = float(os.environ.get("ALLOWED_CENTER_LAT", "24.2651997"))
 DEFAULT_CENTER_LNG = float(os.environ.get("ALLOWED_CENTER_LNG", "55.7314160"))
 DEFAULT_RADIUS_M = float(os.environ.get("ALLOWED_RADIUS_METERS", "250"))
 DEFAULT_MAX_GPS_ACCURACY_M = float(os.environ.get("MAX_GPS_ACCURACY_METERS", "250"))
+DEFAULT_ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Admin@UAE#2026!R7pQ")
+DEFAULT_OWNER_PASSWORD = os.environ.get("OWNER_PASSWORD", "Ahna@@@$$$")
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -557,13 +559,13 @@ def owner_audit():
 @app.route("/admin/users", methods=["GET", "POST"])
 @user_manage_required
 def admin_users():
+    current = current_user()
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         full_name = request.form.get("full_name", "").strip()
         password = request.form.get("password", "")
-        current = current_user()
         role = request.form.get("role", "user")
-        # Normal Admin can add regular users only. System Owner can create admin/owner accounts.
+        # Normal Admin can add normal users only. Role input is ignored for Admin.
         if current.role != "owner":
             role = "user"
         elif role not in ["user", "admin", "owner"]:
@@ -580,8 +582,16 @@ def admin_users():
             audit("create_user", "user", u.id, f"Created username={username}, role={role}")
             db.session.commit()
             flash("User created.", "success")
-    users = User.query.order_by(User.created_at.desc()).all()
-    return render_template("users.html", users=users)
+    role_filter = request.args.get("role", "user" if current.role != "owner" else "all")
+    query = User.query
+    if current.role != "owner":
+        # Admin sees/manages normal users only. Admin/owner accounts are hidden here.
+        query = query.filter(User.role == "user")
+        role_filter = "user"
+    elif role_filter in ["user", "admin", "owner"]:
+        query = query.filter(User.role == role_filter)
+    users = query.order_by(User.created_at.desc()).all()
+    return render_template("users.html", users=users, role_filter=role_filter)
 
 @app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
 @user_manage_required
@@ -602,6 +612,34 @@ def delete_user(user_id):
     audit("deactivate_user", "user", target.id, f"Deactivated username={target.username}")
     db.session.commit()
     flash("User deactivated. Historical attendance records are kept.", "success")
+    return redirect(url_for("admin_users"))
+
+@app.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
+@user_manage_required
+def reset_user_password(user_id):
+    current = current_user()
+    target = User.query.get_or_404(user_id)
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+    if target.id == current.id:
+        flash("You cannot reset your own password from this page.", "danger")
+        return redirect(url_for("admin_users"))
+    if current.role != "owner" and target.role != "user":
+        flash("Admin can reset normal user passwords only.", "danger")
+        return redirect(url_for("admin_users"))
+    if target.role == "owner" and current.role != "owner":
+        flash("Owner password cannot be reset by Admin.", "danger")
+        return redirect(url_for("admin_users"))
+    if not new_password or len(new_password) < 8:
+        flash("Password must be at least 8 characters.", "danger")
+        return redirect(url_for("admin_users"))
+    if new_password != confirm_password:
+        flash("Password confirmation does not match.", "danger")
+        return redirect(url_for("admin_users"))
+    target.set_password(new_password)
+    audit("reset_password", "user", target.id, f"Password reset for username={target.username}")
+    db.session.commit()
+    flash("Password reset successfully.", "success")
     return redirect(url_for("admin_users"))
 
 @app.route("/admin/settings", methods=["GET", "POST"])
@@ -668,7 +706,7 @@ def export_excel():
 @app.route("/init-db")
 def init_db_route():
     init_db()
-    return "Database initialized. Default admin: admin / admin123. System Owner: Ahmad / configured owner password."
+    return "Database initialized. Default admin: admin / configured secure admin password. System Owner: Ahmad / configured owner password."
 
 def ensure_schema_upgrades():
     """Lightweight startup migration for existing Railway/PostgreSQL or SQLite databases."""
@@ -725,14 +763,20 @@ def init_db():
         set_setting("block_hosting_provider", "1")
         set_setting("block_non_uae_ip", "0")
         db.session.commit()
-    if not User.query.filter(func.lower(User.username) == "admin").first():
-        admin = User(username="admin", full_name="System Admin", role="admin")
-        admin.set_password(os.environ.get("ADMIN_PASSWORD", "admin123"))
-        db.session.add(admin)
+    admin_user = User.query.filter(func.lower(User.username) == "admin").first()
+    if not admin_user:
+        admin_user = User(username="admin", full_name="System Admin", role="admin")
+        admin_user.set_password(DEFAULT_ADMIN_PASSWORD)
+        db.session.add(admin_user)
+        db.session.commit()
+    # Apply the new stronger default admin password once, unless ADMIN_PASSWORD is changed later by environment.
+    if get_setting("secure_admin_password_applied", "0") != "1":
+        admin_user.set_password(DEFAULT_ADMIN_PASSWORD)
+        set_setting("secure_admin_password_applied", "1")
         db.session.commit()
     if not User.query.filter(func.lower(User.username) == "ahmad").first():
         owner = User(username="Ahmad", full_name="Ahmad - System Owner", role="owner")
-        owner.set_password(os.environ.get("OWNER_PASSWORD", "Ahna@@@$$$"))
+        owner.set_password(DEFAULT_OWNER_PASSWORD)
         db.session.add(owner)
         db.session.commit()
 
