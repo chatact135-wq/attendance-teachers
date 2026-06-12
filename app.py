@@ -65,6 +65,10 @@ class Attendance(db.Model):
     distance_m = db.Column(db.Float)
     photo_path = db.Column(db.String(255), nullable=False)
     user_agent = db.Column(db.Text)
+    client_platform = db.Column(db.String(120))
+    client_language = db.Column(db.String(80))
+    client_timezone = db.Column(db.String(120))
+    client_screen = db.Column(db.String(80))
     ip_address = db.Column(db.String(80))
     ip_country = db.Column(db.String(80))
     ip_org = db.Column(db.String(255))
@@ -377,6 +381,10 @@ def submit_attendance():
     lng = request.form.get("longitude")
     accuracy = request.form.get("accuracy") or None
     photo_data = request.form.get("photo_data", "")
+    client_platform = request.form.get("client_platform", "")[:120]
+    client_language = request.form.get("client_language", "")[:80]
+    client_timezone = request.form.get("client_timezone", "")[:120]
+    client_screen = request.form.get("client_screen", "")[:80]
 
     if action not in ["IN", "OUT"]:
         flash("Invalid attendance action.", "danger")
@@ -444,6 +452,10 @@ def submit_attendance():
         distance_m=dist,
         photo_path=f"captures/{filename}",
         user_agent=request.headers.get("User-Agent", ""),
+        client_platform=client_platform,
+        client_language=client_language,
+        client_timezone=client_timezone,
+        client_screen=client_screen,
         ip_address=get_client_ip(),
         ip_country=ip_risk.get("country", ""),
         ip_org=ip_risk.get("org", ""),
@@ -521,6 +533,10 @@ def owner_manual_record():
             distance_m=dist,
             photo_path=f"captures/{filename}",
             user_agent="Manual owner entry",
+            client_platform="Manual owner entry",
+            client_language="",
+            client_timezone="Asia/Dubai",
+            client_screen="",
             ip_address=get_client_ip(),
             ip_country="OWNER_MANUAL",
             ip_org="Owner manual entry",
@@ -609,8 +625,14 @@ def admin_users():
     role_filter = request.args.get("role", "user" if current.role != "owner" else "all")
     query = User.query
     if current.role != "owner":
-        # Admin sees/manages normal users only. Admin/owner accounts are hidden here.
-        query = query.filter(User.role == "user")
+        # Admin sees/manages ACTIVE normal users only. Admin, owner, inactive, and reserved system accounts are hidden here.
+        query = query.filter(
+            User.role == "user",
+            User.is_active == True,
+            ~func.lower(User.username).in_(["admin", "owner", "ahmad", "ahmed"]),
+            ~User.full_name.ilike("%System Owner%"),
+            ~User.full_name.ilike("%System Admin%")
+        )
         role_filter = "user"
     elif role_filter in ["user", "admin", "owner"]:
         query = query.filter(User.role == role_filter)
@@ -728,7 +750,7 @@ def admin_settings():
 def export_excel():
     rows = []
     for r in Attendance.query.join(User, Attendance.user_id == User.id).order_by(Attendance.timestamp_utc.desc()).all():
-        rows.append({
+        row = {
             "Name": r.user.full_name,
             "Username": r.user.username,
             "Action": "Sign In" if r.action == "IN" else "Sign Out",
@@ -738,18 +760,28 @@ def export_excel():
             "Longitude": r.longitude,
             "Accuracy meters": r.accuracy,
             "Distance from allowed center meters": round(r.distance_m or 0, 2),
-            "IP Address": r.ip_address,
-            "IP Country": r.ip_country or "",
-            "IP Organization": r.ip_org or "",
-            "VPN/Proxy Detected": "Yes" if r.ip_is_vpn else "No",
-            "Datacenter/Hosting Detected": "Yes" if r.ip_is_hosting else "No",
-            "Security Status": r.security_status or "",
             "Manual Record": "Yes" if r.is_manual else "No",
             "Created By": r.created_by.full_name if r.created_by else "User self sign-in/out",
             "Updated By": r.updated_by.full_name if r.updated_by else "",
             "Note": r.note or "",
             "Photo": r.photo_path,
-        })
+        }
+        # Hide IP/security/device details from normal Admin exports. Only System Owner can export them.
+        if current_user.role == "owner":
+            row.update({
+                "IP Address": r.ip_address,
+                "IP Country": r.ip_country or "",
+                "IP Organization": r.ip_org or "",
+                "VPN/Proxy Detected": "Yes" if r.ip_is_vpn else "No",
+                "Datacenter/Hosting Detected": "Yes" if r.ip_is_hosting else "No",
+                "Security Status": r.security_status or "",
+                "Client Platform": r.client_platform or "",
+                "Client Language": r.client_language or "",
+                "Client Timezone": r.client_timezone or "",
+                "Client Screen": r.client_screen or "",
+                "User Agent": r.user_agent or "",
+            })
+        rows.append(row)
     df = pd.DataFrame(rows)
     out = os.path.join(BASE_DIR, "attendance_export.xlsx")
     df.to_excel(out, index=False)
@@ -785,6 +817,10 @@ def ensure_schema_upgrades():
             "ip_is_vpn": "ALTER TABLE attendance ADD COLUMN ip_is_vpn BOOLEAN DEFAULT FALSE",
             "ip_is_hosting": "ALTER TABLE attendance ADD COLUMN ip_is_hosting BOOLEAN DEFAULT FALSE",
             "security_status": "ALTER TABLE attendance ADD COLUMN security_status VARCHAR(255)",
+            "client_platform": "ALTER TABLE attendance ADD COLUMN client_platform VARCHAR(120)",
+            "client_language": "ALTER TABLE attendance ADD COLUMN client_language VARCHAR(80)",
+            "client_timezone": "ALTER TABLE attendance ADD COLUMN client_timezone VARCHAR(120)",
+            "client_screen": "ALTER TABLE attendance ADD COLUMN client_screen VARCHAR(80)",
         }
     else:
         ddl = {
@@ -794,6 +830,15 @@ def ensure_schema_upgrades():
             "updated_by_id": "ALTER TABLE attendance ADD COLUMN updated_by_id INTEGER",
             "updated_at": "ALTER TABLE attendance ADD COLUMN updated_at DATETIME",
             "note": "ALTER TABLE attendance ADD COLUMN note TEXT",
+            "ip_country": "ALTER TABLE attendance ADD COLUMN ip_country VARCHAR(80)",
+            "ip_org": "ALTER TABLE attendance ADD COLUMN ip_org VARCHAR(255)",
+            "ip_is_vpn": "ALTER TABLE attendance ADD COLUMN ip_is_vpn BOOLEAN DEFAULT 0",
+            "ip_is_hosting": "ALTER TABLE attendance ADD COLUMN ip_is_hosting BOOLEAN DEFAULT 0",
+            "security_status": "ALTER TABLE attendance ADD COLUMN security_status VARCHAR(255)",
+            "client_platform": "ALTER TABLE attendance ADD COLUMN client_platform VARCHAR(120)",
+            "client_language": "ALTER TABLE attendance ADD COLUMN client_language VARCHAR(80)",
+            "client_timezone": "ALTER TABLE attendance ADD COLUMN client_timezone VARCHAR(120)",
+            "client_screen": "ALTER TABLE attendance ADD COLUMN client_screen VARCHAR(80)",
         }
     for col, stmt in ddl.items():
         if col not in existing:
@@ -836,18 +881,31 @@ def init_db():
         admin_user.set_password(DEFAULT_ADMIN_PASSWORD)
         set_setting("secure_admin_password_applied", "1")
         db.session.commit()
-    # Always ensure the System Owner account exists and has the correct role.
-    # This fixes deployments where an older database already had Ahmad/Ahmed/owner as a normal user/admin.
-    owner = User.query.filter(func.lower(User.username).in_(["owner", "ahmad", "ahmed"])).first()
+    # Always ensure one official System Owner account exists.
+    # If an old Ahmad/Ahmed owner exists while owner already exists, keep owner and deactivate the old duplicates.
+    owner = User.query.filter(func.lower(User.username) == "owner").first()
     if not owner:
-        owner = User(username="owner", full_name="System Owner", role="owner")
-        db.session.add(owner)
+        old_owner = User.query.filter(func.lower(User.username).in_(["ahmad", "ahmed"])).first()
+        if old_owner:
+            old_owner.username = "owner"
+            owner = old_owner
+        else:
+            owner = User(username="owner", full_name="System Owner", role="owner")
+            db.session.add(owner)
+    # Deactivate old duplicate owner usernames so they do not conflict or confuse login.
+    duplicates = User.query.filter(func.lower(User.username).in_(["ahmad", "ahmed"])).all()
+    for dup in duplicates:
+        if dup.id != owner.id:
+            # Keep old owner duplicates hidden from Admin user management.
+            # They are deactivated and kept as owner/system records, not normal users.
+            dup.is_active = False
+            dup.role = "owner"
+            if "System Owner" not in (dup.full_name or ""):
+                dup.full_name = (dup.full_name or dup.username) + " - Old System Owner"
     owner.username = "owner"
     owner.full_name = "System Owner"
     owner.role = "owner"
     owner.is_active = True
-    # Reset owner password on startup from OWNER_PASSWORD env var, or the default below.
-    # Change OWNER_PASSWORD in Railway Variables if you want a different owner password.
     owner.set_password(DEFAULT_OWNER_PASSWORD)
     db.session.commit()
 

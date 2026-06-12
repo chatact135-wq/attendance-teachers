@@ -109,3 +109,10 @@ This version compares the user's live GPS location against the saved allowed cen
 - Radius: 250 meters
 
 The browser also displays the calculated distance from that saved center before allowing Sign In/Sign Out. The server repeats the same check on submit, so users cannot bypass it by editing the page.
+
+
+Update notes: User page hides IP. IP/device details are stored in DB and visible only to System Owner. Browser websites cannot read MAC addresses; the system stores IP, user-agent, platform, language, timezone, and screen size instead.
+
+
+## Admin user visibility fix
+Normal Admin accounts see active normal users only. System Owner/Admin/reserved accounts such as owner, admin, Ahmad, and Ahmed are hidden from the Admin Users page.

@@ -15,6 +15,10 @@ const lngInput = document.getElementById('longitude');
 const accInput = document.getElementById('accuracy');
 const deviceTime = document.getElementById('device_time');
 const securityStatus = document.getElementById('securityStatus');
+const clientPlatformInput = document.getElementById('client_platform');
+const clientLanguageInput = document.getElementById('client_language');
+const clientTimezoneInput = document.getElementById('client_timezone');
+const clientScreenInput = document.getElementById('client_screen');
 
 let securityBlocked = false;
 let cameraReady = false;
@@ -53,7 +57,17 @@ function setAction(action) {
   actionInput.value = action;
 }
 
+function fillClientDetails(){
+  if(clientPlatformInput) clientPlatformInput.value = navigator.platform || '';
+  if(clientLanguageInput) clientLanguageInput.value = navigator.language || '';
+  if(clientTimezoneInput) {
+    try { clientTimezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch(e) { clientTimezoneInput.value = ''; }
+  }
+  if(clientScreenInput) clientScreenInput.value = `${window.screen.width}x${window.screen.height}`;
+}
+
 function updateButtons(){
+  fillClientDetails();
   deviceTime.value = 'SERVER_UAE_TIME_ONLY';
   const ready = photoReady && locationReady && !securityBlocked && !geofenceBlocked;
   if (signInBtn) signInBtn.disabled = !(ready && window.CAN_SIGN_IN);
@@ -71,7 +85,7 @@ async function checkSecurity(){
       alert(`Blocked: ${data.reason}. Turn off VPN/proxy and try again.`);
     }else{
       securityBlocked = false;
-      securityStatus.textContent = `Security: ${data.reason}${data.ip ? ' | IP: '+data.ip : ''}`;
+      securityStatus.textContent = `Security: ${data.reason}`;
     }
   }catch(e){
     securityBlocked = false;
@@ -140,14 +154,14 @@ getLocation.addEventListener('click', async ()=>{
     if (distance > radius) {
       locationReady = false;
       geofenceBlocked = true;
-      locationStatus.textContent = `Location: BLOCKED. You are ${Math.round(distance)} m from saved center (${centerLat.toFixed(7)}, ${centerLng.toFixed(7)}). Allowed radius is ${Math.round(radius)} m.`;
+      locationStatus.textContent = `Location: BLOCKED. You are far from the school. Distance: ${Math.round(distance)} m. Allowed radius: ${Math.round(radius)} m.`;
       updateButtons();
       return;
     }
 
     locationReady = true;
     geofenceBlocked = false;
-    locationStatus.textContent = `Location: OK. You are ${Math.round(distance)} m from saved center (${centerLat.toFixed(7)}, ${centerLng.toFixed(7)}). GPS accuracy ${Math.round(accuracy)} m. Allowed radius ${Math.round(radius)} m.`;
+    locationStatus.textContent = `Location: OK. You are inside the school area. Distance: ${Math.round(distance)} m. GPS accuracy: ${Math.round(accuracy)} m.`;
     checkSecurity();
     updateButtons();
   },(err)=>{
@@ -184,6 +198,7 @@ document.getElementById('attendanceForm').addEventListener('submit',(e)=>{
   }
 });
 
+fillClientDetails();
 loadLocationConfig();
 checkSecurity();
 updateButtons();

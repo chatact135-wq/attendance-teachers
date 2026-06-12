@@ -35,6 +35,10 @@
       <input type="hidden" name="longitude" id="longitude">
       <input type="hidden" name="accuracy" id="accuracy">
       <input type="hidden" name="photo_data" id="photo_data">
+      <input type="hidden" name="client_platform" id="client_platform">
+      <input type="hidden" name="client_language" id="client_language">
+      <input type="hidden" name="client_timezone" id="client_timezone">
+      <input type="hidden" name="client_screen" id="client_screen">
       <div class="actions">
         <button id="signInBtn" class="primary big" type="submit" data-action="IN" {% if not can_sign_in %}disabled{% endif %}>Sign In</button>
         <button id="signOutBtn" class="primary big" type="submit" data-action="OUT" {% if not can_sign_out %}disabled{% endif %}>Sign Out</button>
